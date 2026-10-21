@@ -1,0 +1,24 @@
+name: Android build
+on:
+  workflow_dispatch:
+  push:
+    branches: [android-termux-clipboard]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - name: Build
+        run: |
+          NDK_BIN=$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
+          export CC_aarch64_linux_android=$NDK_BIN/aarch64-linux-android24-clang
+          export AR_aarch64_linux_android=$NDK_BIN/llvm-ar
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK_BIN/aarch64-linux-android24-clang
+          cargo build --release --target aarch64-linux-android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alphacode-android
+          path: target/aarch64-linux-android/release/alphacode
