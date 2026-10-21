@@ -138,6 +138,21 @@ fn copy_to_clipboard(text: &str) -> Result<()> {
         let _ = crate::alphacode_core::fs::set_permissions_owner_only(&path);
         Ok(())
     }
+    #[cfg(target_os = "android")]
+    {
+        use std::io::Write;
+        let mut child = Command::new("termux-clipboard-set")
+            .stdin(Stdio::piped())
+            .spawn()?;
+        if let Some(ref mut stdin) = child.stdin {
+            stdin.write_all(text.as_bytes())?;
+        }
+        let status = child.wait()?;
+        if !status.success() {
+            anyhow::bail!("termux-clipboard-set exited with {status}");
+        }
+        Ok(())
+    }
     #[cfg(target_os = "windows")]
     {
         // Windows: use clip command
@@ -191,6 +206,10 @@ fn paste_from_clipboard() -> Result<(String, bool)> {
         let truncated = bytes.len() > MAX_CLIPBOARD_BYTES;
         bytes.truncate(MAX_CLIPBOARD_BYTES);
         Ok((String::from_utf8_lossy(&bytes).into_owned(), truncated))
+    }
+    #[cfg(target_os = "android")]
+    {
+        run_clipboard_reader("termux-clipboard-get", &[])
     }
     #[cfg(target_os = "windows")]
     {

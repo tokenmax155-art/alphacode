@@ -425,7 +425,26 @@ pub(super) fn copy_to_clipboard(text: &str) -> bool {
         // selection), then arboard, and only then OSC 52 for genuinely
         // headless/remote sessions (SSH, Docker, tmux) where the native paths
         // fail fast for lack of a display server.
-        #[cfg(not(any(windows, target_os = "macos")))]
+        #[cfg(target_os = "android")]
+        {
+            if std::process::Command::new("termux-clipboard-set")
+                .stdin(std::process::Stdio::piped())
+                .spawn()
+                .and_then(|mut child| {
+                    use std::io::Write;
+                    if let Some(mut stdin) = child.stdin.take() {
+                        stdin.write_all(text.as_bytes())?;
+                    }
+                    child.wait()
+                })
+                .is_ok_and(|status| status.success())
+            {
+                return true;
+            }
+            return false;
+        }
+
+        #[cfg(not(any(windows, target_os = "macos", target_os = "android")))]
         {
             if clipboard_helper::copy_via_clipboard_helper("wl-copy", &[], text) {
                 return true;
@@ -892,13 +911,16 @@ pub(super) fn clipboard_image() -> Option<(String, String)> {
         }
     }
 
-    // Fallback: arboard (works on X11/XWayland and macOS via NSPasteboard)
-    if let Ok(mut clipboard) = arboard::Clipboard::new()
-        && let Ok(img) = clipboard.get_image()
-        && let Some(png_data) = encode_rgba_as_png(img.width, img.height, &img.bytes)
+    // Fallback: arboard on non-Android platforms.
+    #[cfg(not(target_os = "android"))]
     {
-        let b64 = base64::engine::general_purpose::STANDARD.encode(&png_data);
-        return Some(("image/png".to_string(), b64));
+        if let Ok(mut clipboard) = arboard::Clipboard::new()
+            && let Ok(img) = clipboard.get_image()
+            && let Some(png_data) = encode_rgba_as_png(img.width, img.height, &img.bytes)
+        {
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&png_data);
+            return Some(("image/png".to_string(), b64));
+        }
     }
 
     None

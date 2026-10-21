@@ -258,10 +258,23 @@ fn read_clipboard_text() -> Option<String> {
         return Some(text);
     }
 
-    let Ok(mut clipboard) = arboard::Clipboard::new() else {
-        return None;
-    };
-    clipboard.get_text().ok()
+    #[cfg(target_os = "android")]
+    {
+        let output = std::process::Command::new("termux-clipboard-get")
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        return Some(String::from_utf8_lossy(&output.stdout).into_owned());
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let Ok(mut clipboard) = arboard::Clipboard::new() else {
+            return None;
+        };
+        clipboard.get_text().ok()
+    }
 }
 
 fn read_wayland_clipboard_text() -> Option<String> {
