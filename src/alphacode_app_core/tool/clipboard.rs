@@ -138,21 +138,48 @@ fn copy_to_clipboard(text: &str) -> Result<()> {
         let _ = crate::alphacode_core::fs::set_permissions_owner_only(&path);
         Ok(())
     }
-    #[cfg(target_os = "android")]
-    {
-        use std::io::Write;
-        let mut child = Command::new("termux-clipboard-set")
+   #[cfg(target_os = "android")]
+   {
+       use std::io::Write;
+        let mut child = match Command::new("termux-clipboard-set")
             .stdin(Stdio::piped())
-            .spawn()?;
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                anyhow::bail!("termux-clipboard-set not found. Install the Termux:API app.");
+            }
+            Err(e) => return Err(e.into()),
+        };
         if let Some(ref mut stdin) = child.stdin {
             stdin.write_all(text.as_bytes())?;
+            drop(child.stdin.take());
         }
-        let status = child.wait()?;
-        if !status.success() {
-            anyhow::bail!("termux-clipboard-set exited with {status}");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    if !status.success() {
+                        anyhow::bail!("termux-clipboard-set exited with {status}");
+                    }
+                    return Ok(());
+                }
+                Ok(None) if Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Ok(None) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    anyhow::bail!("termux-clipboard-set timed out after 5 seconds. Install the Termux:API app.");
+                }
+                Err(e) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(e.into());
+                }
+            }
         }
-        Ok(())
-    }
+   }
     #[cfg(target_os = "windows")]
     {
         // Windows: use clip command
