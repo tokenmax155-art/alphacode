@@ -11,6 +11,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
+      - name: Add Android target
+        run: rustup target add aarch64-linux-android
       - name: Build
         run: |
           NDK_BIN=$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
